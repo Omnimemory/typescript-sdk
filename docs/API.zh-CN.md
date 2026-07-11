@@ -84,7 +84,7 @@ await memory.jobs.wait(jobId, {
 });
 ```
 
-默认总超时为 `60_000`ms，轮询间隔为 `1_000`ms。任务状态为 `completed`、`done`、`succeeded`、`success`、`failed`、`error`、`cancelled` 或 `canceled` 时会返回；请检查 `status` 区分成功和失败终态。超时时抛出 `MemAuraTimeoutError`，如果已查询到状态，其中会带上最后的任务状态。
+默认总超时为 `60_000`ms，轮询间隔为 `1_000`ms。任务状态为 `accumulated`、`completed`、`done`、`succeeded`、`success`、`failed`、`error`、`cancelled` 或 `canceled` 时会返回；请检查 `status` 区分成功和失败终态。超时时抛出 `MemAuraTimeoutError`，如果已查询到状态，其中会带上最后的任务状态。
 
 ## 错误
 

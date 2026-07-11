@@ -81,7 +81,7 @@ const terminal = await memory.jobs.wait(job.jobId, {
 });
 ```
 
-`jobs.wait()` polls only the status endpoint. It never submits a second ingest. Its timeout covers the complete wait, including an in-flight status request; a `MemAuraTimeoutError` includes `lastJob` when a status was observed.
+`jobs.wait()` polls only the status endpoint. It never submits a second ingest. It stops for successful statuses including `succeeded` and `accumulated`, as well as failed terminal statuses; inspect `status` to distinguish them. Its timeout covers the complete wait, including an in-flight status request; a `MemAuraTimeoutError` includes `lastJob` when a status was observed.
 
 ## Errors
 

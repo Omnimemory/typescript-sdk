@@ -2,6 +2,7 @@ import { MemAuraNetworkError, MemAuraTimeoutError, MemAuraValidationError } from
 import type { JobLookupOptions, JobStatus, WaitForJobOptions } from './types';
 
 const terminalStatuses = new Set([
+  'accumulated',
   'canceled',
   'cancelled',
   'completed',

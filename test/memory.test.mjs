@@ -148,6 +148,17 @@ test('Memory jobs wait exposes the last observed status on timeout', async (t) =
   );
 });
 
+test('Memory jobs wait treats accumulated as a normal terminal status', async (t) => {
+  const server = await startServer(() => ok({ job_id: 'job-1', status: 'accumulated' }));
+  t.after(server.close);
+
+  const memory = new Memory({ apiKey: 'qbk_test', endpoint: server.url });
+  const status = await memory.jobs.wait('job-1', { intervalMs: 1, timeoutMs: 100 });
+
+  assert.equal(status.status, 'accumulated');
+  assert.equal(server.requests.length, 1);
+});
+
 test('Memory jobs wait applies its total timeout to an in-flight status request', async (t) => {
   const server = await startServer(async () => {
     await new Promise((resolve) => setTimeout(resolve, 60));

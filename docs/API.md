@@ -84,7 +84,7 @@ await memory.jobs.wait(jobId, {
 });
 ```
 
-Defaults are `60_000`ms for the total timeout and `1_000`ms for the polling interval. The method resolves at `completed`, `done`, `succeeded`, `success`, `failed`, `error`, `cancelled`, or `canceled`; inspect `status` to distinguish a successful terminal state from a failed one. A timeout throws `MemAuraTimeoutError` and includes the last observed job status when available.
+Defaults are `60_000`ms for the total timeout and `1_000`ms for the polling interval. The method resolves at `accumulated`, `completed`, `done`, `succeeded`, `success`, `failed`, `error`, `cancelled`, or `canceled`; inspect `status` to distinguish a successful terminal state from a failed one. A timeout throws `MemAuraTimeoutError` and includes the last observed job status when available.
 
 ## Errors
 

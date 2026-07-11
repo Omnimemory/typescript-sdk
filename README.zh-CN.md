@@ -81,7 +81,7 @@ const terminal = await memory.jobs.wait(job.jobId, {
 });
 ```
 
-`jobs.wait()` 只轮询任务状态，不会重新提交 ingest。它的超时覆盖完整等待过程，包括正在执行的状态请求；如果已拿到状态，`MemAuraTimeoutError` 会携带 `lastJob`。
+`jobs.wait()` 只轮询任务状态，不会重新提交 ingest。它会在 `succeeded`、`accumulated` 等成功终态以及失败终态停止，请检查 `status` 区分结果。它的超时覆盖完整等待过程，包括正在执行的状态请求；如果已拿到状态，`MemAuraTimeoutError` 会携带 `lastJob`。
 
 ## 错误处理
 
