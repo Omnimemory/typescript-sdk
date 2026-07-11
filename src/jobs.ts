@@ -71,7 +71,17 @@ export class JobOperations {
       if (remainingMs <= 0) {
         break;
       }
-      lastJob = await this.getJobStatus(jobId, options, remainingMs);
+      try {
+        lastJob = await this.getJobStatus(jobId, options, remainingMs);
+      } catch (error) {
+        if (error instanceof MemAuraTimeoutError) {
+          throw new MemAuraTimeoutError(`Timed out waiting for ingest job ${jobId}`, {
+            cause: error,
+            lastJob,
+          });
+        }
+        throw error;
+      }
       if (lastJob.status && terminalStatuses.has(lastJob.status.toLowerCase())) {
         return lastJob;
       }
