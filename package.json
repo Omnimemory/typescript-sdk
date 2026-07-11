@@ -1,0 +1,52 @@
+{
+  "name": "@memaura/sdk",
+  "version": "0.1.0",
+  "description": "Official MemAura TypeScript SDK for Node.js",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "README.zh-CN.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsup",
+    "check": "tsc --noEmit",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "generate": "openapi-ts",
+    "check:generated": "npm run generate && git diff --exit-code -- src/generated"
+  },
+  "keywords": [
+    "memaura",
+    "memory",
+    "ai",
+    "sdk"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Omnimemory/typescript-sdk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Omnimemory/typescript-sdk/issues"
+  },
+  "homepage": "https://github.com/Omnimemory/typescript-sdk#readme",
+  "devDependencies": {
+    "@hey-api/openapi-ts": "^0.99.0",
+    "tsup": "^8.5.1",
+    "typescript": "5.7.3"
+  }
+}

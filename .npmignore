@@ -1,0 +1,7 @@
+src/
+test/
+openapi/
+.github/
+tsconfig.json
+tsup.config.ts
+openapi-ts.config.ts
