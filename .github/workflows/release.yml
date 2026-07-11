@@ -34,4 +34,4 @@ jobs:
         run: |
           test "$(git describe --exact-match --tags)" = "v${{ inputs.version }}"
           test "$(node -p \"require('./package.json').version\")" = "${{ inputs.version }}"
-      - run: npm publish --provenance
+      - run: npm publish --provenance --access public

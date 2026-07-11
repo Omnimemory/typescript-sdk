@@ -45,6 +45,9 @@
     "url": "https://github.com/Omnimemory/typescript-sdk/issues"
   },
   "homepage": "https://github.com/Omnimemory/typescript-sdk#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "devDependencies": {
     "@hey-api/openapi-ts": "0.99.0",
     "tsup": "8.5.1",
