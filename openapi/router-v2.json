@@ -1,0 +1,1045 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "memory_router API v2",
+    "description": "\nMemory Router v2 接口：统一响应信封。\n\n所有响应（含错误）的 body 都是 `{success, message, code, data}`：\n- `success`：业务是否成功；\n- `code`：HTTP 状态码的数字镜像（HTTP 状态码保持真实语义）；\n- 成功时 `data` 放业务数据；失败时 `data` 为 null 或\n  `{\"error\": <业务错误码>, \"detail\": ...}`。\n\n鉴权与 v1 相同：控制面接口用用户 token（`Authorization: Bearer <token>`）。\n",
+    "version": "2.0.0"
+  },
+  "servers": [
+    {
+      "url": "/api/v2"
+    }
+  ],
+  "paths": {
+    "/memory/ingest": {
+      "post": {
+        "tags": [
+          "Memory (数据面)"
+        ],
+        "summary": "提交记忆 ingest 任务（异步，信封版）",
+        "description": "异步写入：任务入队，data 返回任务 ack（job_id/session_id/status/status_url）。\n\n**幂等去重**：同时传 commit_id 时，重复提交不会重复入队（超时重试安全）。已传 device_no 的场景无需额外传 session_id；ack 中 session_id 回显传入值，未传则为 null。数据面接口，鉴权用 API Key（请求头 X-API-Key 或 Authorization: Bearer qbk_...）。带设备号（X-Device-No 或 body.client_meta.device_no）时按设备隔离记忆命名空间。",
+        "operationId": "memory_ingest_memory_ingest_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_IngestJobAck_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证或 token 无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "examples": [
+                  {
+                    "client_meta": {
+                      "device_no": "dev-001"
+                    },
+                    "commit_id": "c-0001",
+                    "turns": [
+                      {
+                        "content": "下周三下午三点提醒我开产品评审会",
+                        "role": "user"
+                      },
+                      {
+                        "content": "好的，已记下：周三 15:00 产品评审会。",
+                        "role": "assistant"
+                      }
+                    ]
+                  }
+                ],
+                "properties": {
+                  "turns": {
+                    "description": "对话轮次列表，必填且非空。",
+                    "items": {
+                      "description": "对话中的单轮消息。\n\n仅 `content` 必填，其余均可选并带默认值。每个 turn 会作为独立的一条消息\n（原文、本轮的 role/sender_name/时间）写入底层记忆引擎，记忆固化（窗口累积、\nLLM 抽取）由引擎侧的 fixed window 决定，因此 turn 数量与最终生成的记忆条数\n并非一一对应。各字段均兼容多个别名（见说明）；仅识别下列字段，其它字段会被\n忽略（不消费、不透传到底层记忆），不会报错。",
+                      "properties": {
+                        "content": {
+                          "description": "消息正文，必填且非空。兼容别名 `text` / `message`；内容为空的 turn 会被丢弃。",
+                          "title": "Content",
+                          "type": "string"
+                        },
+                        "role": {
+                          "default": "user",
+                          "description": "消息角色，默认 `user`，仅识别 user/assistant/system。兼容别名 `role_type`。",
+                          "enum": [
+                            "user",
+                            "assistant",
+                            "system"
+                          ],
+                          "title": "Role",
+                          "type": "string"
+                        },
+                        "turn_id": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "轮次唯一 ID，可选。兼容别名 `id` / `uuid`；缺省时按顺序自动生成 `t{序号}`。",
+                          "title": "Turn Id"
+                        },
+                        "timestamp": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "消息时间，ISO 8601 字符串或 Unix 秒级时间戳。兼容别名 `created_at` / `time`；缺省取服务端当前时间。",
+                          "title": "Timestamp"
+                        },
+                        "sender_name": {
+                          "anyOf": [
+                            {
+                              "type": "string"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "发送者显示名，可选。兼容别名 `name` / `speaker_name`；缺省取 role。",
+                          "title": "Sender Name"
+                        },
+                        "refer_list": {
+                          "anyOf": [
+                            {
+                              "items": {
+                                "type": "string"
+                              },
+                              "type": "array"
+                            },
+                            {
+                              "type": "null"
+                            }
+                          ],
+                          "description": "引用的消息 ID 列表，可选。兼容别名 `referList`。",
+                          "title": "Refer List"
+                        }
+                      },
+                      "required": [
+                        "content"
+                      ],
+                      "title": "Turn",
+                      "type": "object"
+                    },
+                    "title": "Turns",
+                    "type": "array"
+                  },
+                  "session_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "会话 ID，可选。传入时决定两件事：①同一 session_id 的多次 ingest 走同一 FIFO、严格有序；②配合 commit_id 做幂等去重，重试安全。**已传 device_no 的场景无需传此字段**——服务端自动按设备隔离写入顺序与去重。未显式传 group_id 时，session_id 同时充当记忆归组的 group_id。ack 响应中的 session_id 回显传入值；未传时为 null。",
+                    "title": "Session Id"
+                  },
+                  "group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "记忆归组 ID（兼容别名 `groupId`）。决定记忆挂在哪个桶、检索时按它过滤。优先级高于 session_id：未传 group_id 时回退用 session_id；两者都不传则每请求自成一组。仅当你希望「检索归桶」与「写入排序单元(session)」是不同维度（如多 session 写入同一共享 group）时才单独传。",
+                    "title": "Group Id"
+                  },
+                  "group_name": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "群组/会话显示名，可选（兼容别名 `groupName`）；缺省取 group_id。",
+                    "title": "Group Name"
+                  },
+                  "commit_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "提交幂等键（兼容别名 `commitId`）。传入后重发同一请求不会重复入队，用于超时重试等 at-least-once 场景。去重粒度：有 device_no 时按设备隔离、有 session_id 时按会话隔离，两者都不传则不去重。",
+                    "title": "Commit Id"
+                  },
+                  "client_meta": {
+                    "anyOf": [
+                      {
+                        "description": "数据面请求的客户端元信息。仅 `device_no` 生效；其它字段会被忽略（不消费、不透传到底层），不会报错。",
+                        "properties": {
+                          "device_no": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "客户自定义设备号；带上则该请求的记忆按设备隔离（亦可用请求头 X-Device-No）。",
+                            "title": "Device No"
+                          }
+                        },
+                        "title": "ClientMeta",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "turns"
+                ],
+                "title": "MemoryIngestPayload",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Device-No",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "客户自定义设备号；带上则该次 ingest 的记忆按设备隔离。也可放 body 的 client_meta.device_no。"
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/memory/retrieval": {
+      "post": {
+        "tags": [
+          "Memory (数据面)"
+        ],
+        "summary": "记忆检索（信封版）",
+        "description": "同步检索。data 为 router 归一化后的检索结构（非上游原样透传）：证据在 `evidence_details`（已排序、截断 top_k），上下文请基于它自行拼装。\n\n数据面接口，鉴权用 API Key（请求头 X-API-Key 或 Authorization: Bearer qbk_...）。带设备号（X-Device-No 或 body.client_meta.device_no）时按设备隔离记忆命名空间。",
+        "operationId": "memory_retrieval_memory_retrieval_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MemoryRetrievalOut_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证或 token 无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "query": {
+                    "description": "检索查询语句",
+                    "title": "Query",
+                    "type": "string"
+                  },
+                  "top_k": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "返回条数上限",
+                    "title": "Top K"
+                  },
+                  "group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "按归组过滤检索范围，可选（兼容别名 groupId）；缺省时回退用 session_id 缩小范围。",
+                    "title": "Group Id"
+                  },
+                  "client_meta": {
+                    "anyOf": [
+                      {
+                        "description": "数据面请求的客户端元信息。仅 `device_no` 生效；其它字段会被忽略（不消费、不透传到底层），不会报错。",
+                        "properties": {
+                          "device_no": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "客户自定义设备号；带上则该请求的记忆按设备隔离（亦可用请求头 X-Device-No）。",
+                            "title": "Device No"
+                          }
+                        },
+                        "title": "ClientMeta",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "title": "MemoryRetrievalPayload",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Device-No",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "客户自定义设备号；带上则该次 ingest 的记忆按设备隔离。也可放 body 的 client_meta.device_no。"
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/memory/retrieval/hybrid": {
+      "post": {
+        "tags": [
+          "Memory (数据面)"
+        ],
+        "summary": "混合记忆检索（信封版）",
+        "description": "同步混合检索。data 为 router 归一化后的检索结构；该接口使用新 hybrid/device_id 检索链路，不改变旧 /memory/retrieval 行为。\n\n数据面接口，鉴权用 API Key（请求头 X-API-Key 或 Authorization: Bearer qbk_...）。带设备号（X-Device-No 或 body.client_meta.device_no）时按设备隔离记忆命名空间。",
+        "operationId": "memory_hybrid_retrieval_memory_retrieval_hybrid_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_MemoryRetrievalOut_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证或 token 无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "query": {
+                    "description": "检索查询语句",
+                    "title": "Query",
+                    "type": "string"
+                  },
+                  "top_k": {
+                    "anyOf": [
+                      {
+                        "type": "integer"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "返回条数上限",
+                    "title": "Top K"
+                  },
+                  "group_id": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "按归组过滤检索范围，可选（兼容别名 groupId）；缺省时回退用 session_id 缩小范围。",
+                    "title": "Group Id"
+                  },
+                  "client_meta": {
+                    "anyOf": [
+                      {
+                        "description": "数据面请求的客户端元信息。仅 `device_no` 生效；其它字段会被忽略（不消费、不透传到底层），不会报错。",
+                        "properties": {
+                          "device_no": {
+                            "anyOf": [
+                              {
+                                "type": "string"
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ],
+                            "description": "客户自定义设备号；带上则该请求的记忆按设备隔离（亦可用请求头 X-Device-No）。",
+                            "title": "Device No"
+                          }
+                        },
+                        "title": "ClientMeta",
+                        "type": "object"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "query"
+                ],
+                "title": "MemoryRetrievalPayload",
+                "type": "object"
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "X-Device-No",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "客户自定义设备号；带上则该次 ingest 的记忆按设备隔离。也可放 body 的 client_meta.device_no。"
+          }
+        ],
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    },
+    "/memory/ingest/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "Memory (数据面)"
+        ],
+        "summary": "ingest 任务状态（信封版）",
+        "description": "按 job_id 查单次 ingest 任务当前状态；查无返回 404 job_not_found。数据面接口，鉴权用 API Key（请求头 X-API-Key 或 Authorization: Bearer qbk_...）。带设备号（X-Device-No 或 body.client_meta.device_no）时按设备隔离记忆命名空间。",
+        "operationId": "ingest_job_status_memory_ingest_jobs__job_id__get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "description": "ingest 任务ID（提交时返回的 job_id）",
+              "title": "Job Id"
+            },
+            "description": "ingest 任务ID（提交时返回的 job_id）"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Envelope_IngestJobStatus_"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "未认证或 token 无效",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "资源不存在",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "请求参数校验失败",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "ApiKeyAuth": []
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Envelope_IngestJobAck_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "与 HTTP 状态码一致（成功时为 200 / 201 / 202）"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestJobAck"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "Envelope[IngestJobAck]"
+      },
+      "ErrorEnvelope": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": false
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          },
+          "code": {
+            "type": "integer",
+            "title": "Code"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ErrorData"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "message",
+          "code"
+        ],
+        "title": "ErrorEnvelope",
+        "description": "失败信封（仅文档用）：data.error 为机器可读的业务错误码。"
+      },
+      "Envelope_MemoryRetrievalOut_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "与 HTTP 状态码一致（成功时为 200 / 201 / 202）"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryRetrievalOut"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "Envelope[MemoryRetrievalOut]"
+      },
+      "Envelope_IngestJobStatus_": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success",
+            "default": true
+          },
+          "message": {
+            "type": "string",
+            "title": "Message",
+            "default": "ok"
+          },
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "description": "与 HTTP 状态码一致（成功时为 200 / 201 / 202）"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestJobStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "title": "Envelope[IngestJobStatus]"
+      },
+      "IngestJobAck": {
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "title": "Ok",
+            "default": true
+          },
+          "job_id": {
+            "type": "string",
+            "title": "Job Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status",
+            "default": "queued"
+          },
+          "status_url": {
+            "type": "string",
+            "title": "Status Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "status_url"
+        ],
+        "title": "IngestJobAck"
+      },
+      "ErrorData": {
+        "properties": {
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "detail": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "ErrorData"
+      },
+      "MemoryRetrievalOut": {
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "title": "Strategy",
+            "description": "结果构造策略标识",
+            "default": "testcore_native"
+          },
+          "query": {
+            "type": "string",
+            "title": "Query",
+            "description": "本次检索的查询语句",
+            "default": ""
+          },
+          "evidence": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Evidence",
+            "description": "evidence_details 的 event_id 列表（顺序一致）"
+          },
+          "evidence_details": {
+            "items": {
+              "$ref": "#/components/schemas/EvidenceDetailOut"
+            },
+            "type": "array",
+            "title": "Evidence Details",
+            "description": "召回证据明细，已按相关性排序并截断 top_k；无正式记忆时回退为 pending 消息原文。"
+          },
+          "requested_group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Requested Group Id",
+            "description": "按 group_id 过滤时回显的归组 ID；未过滤时无此字段。"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "title": "MemoryRetrievalOut",
+        "description": "检索结果。\n\n并非上游原样透传：router 把上游记忆引擎返回的原始 memories / pending_messages\n重组为本结构（`testcore_runtime.build_testcore_native_retrieval_body`），\n上下文拼装请基于 `evidence_details`。"
+      },
+      "IngestJobStatus": {
+        "properties": {
+          "job_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Job Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "IngestJobStatus"
+      },
+      "EvidenceDetailOut": {
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "title": "Event Id",
+            "description": "证据 ID（记忆 id；pending 兜底时为 message_id/request_id）"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "description": "证据来源：记忆类型（如 memory/pending_buffer）；pending 兜底时为 pending_message。",
+            "default": "memory"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role",
+            "description": "发言角色（user/assistant/system）。仅单条消息的证据（pending 类）有值；多消息固化的记忆叙述为 null。"
+          },
+          "sender_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sender Name",
+            "description": "发言人显示名（客户端传入的 sender_name，缺省为 User/Assistant）。取值范围同 role 字段说明。"
+          },
+          "text": {
+            "type": "string",
+            "title": "Text",
+            "description": "证据正文"
+          },
+          "atomic_facts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Atomic Facts",
+            "description": "core 抽取出的原子事实列表；pending 兜底时为空。"
+          },
+          "group_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group Id",
+            "description": "记忆归组 ID"
+          },
+          "timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Timestamp",
+            "description": "结构化时间（ISO 8601，+08:00）：记忆窗口时间或消息时间，便于排序/展示，无需从 text 解析。"
+          }
+        },
+        "additionalProperties": true,
+        "type": "object",
+        "required": [
+          "event_id",
+          "text"
+        ],
+        "title": "EvidenceDetailOut",
+        "description": "单条召回证据。正式记忆与 pending 消息兜底共用此形状（pending 仅有基础字段）。"
+      }
+    },
+    "securitySchemes": {
+      "ApiKeyAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-API-Key",
+        "description": "数据面（/memory）：API Key（前缀 qbk_）。也可用 Authorization: Bearer qbk_...。"
+      }
+    }
+  }
+}

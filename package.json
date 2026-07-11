@@ -26,6 +26,7 @@
     "build": "tsup",
     "check": "tsc --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
+    "sync:openapi": "node scripts/create-openapi-snapshot.mjs",
     "generate": "openapi-ts",
     "check:generated": "npm run generate && git diff --exit-code -- src/generated"
   },
@@ -45,8 +46,8 @@
   },
   "homepage": "https://github.com/Omnimemory/typescript-sdk#readme",
   "devDependencies": {
-    "@hey-api/openapi-ts": "^0.99.0",
-    "tsup": "^8.5.1",
+    "@hey-api/openapi-ts": "0.99.0",
+    "tsup": "8.5.1",
     "typescript": "5.7.3"
   }
 }
