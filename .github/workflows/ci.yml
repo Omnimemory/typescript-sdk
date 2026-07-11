@@ -7,8 +7,21 @@ on:
       - main
 
 jobs:
+  generate:
+    name: Generated contract
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run check:generated
+
   verify:
     name: Node ${{ matrix.node }}
+    needs: generate
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -22,6 +35,5 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
-      - run: npm run check:generated
       - run: npm test
       - run: npm pack --dry-run

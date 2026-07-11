@@ -11,3 +11,13 @@ test('package and release workflow publish the scoped package publicly with prov
   assert.match(workflow, /id-token:\s*write/);
   assert.match(workflow, /npm publish --provenance --access public/);
 });
+
+test('CI verifies every supported runtime while generating contracts on Node 20', async () => {
+  const workflow = await readFile('.github/workflows/ci.yml', 'utf8');
+  const verifyJob = workflow.slice(workflow.indexOf('  verify:'));
+
+  assert.match(workflow, /generate:[\s\S]*node-version: 20/);
+  assert.match(verifyJob, /needs: generate/);
+  assert.match(verifyJob, /node: \[18, 20, 22, 24, 26\]/);
+  assert.doesNotMatch(verifyJob, /npm run check:generated/);
+});
