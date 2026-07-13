@@ -1,37 +1,136 @@
-name: Release
+name: Release MemAura TypeScript SDK
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: Version without the v prefix
+        description: Canonical package version, for example 0.0.1
         required: true
         type: string
+      resume_publish:
+        description: Publish an existing release tag without creating another tag
+        required: true
+        default: false
+        type: boolean
 
-permissions:
-  contents: read
-  id-token: write
+concurrency:
+  group: memaura-typescript-sdk-release
+  cancel-in-progress: false
 
 jobs:
-  publish:
-    environment: npm
+  prepare-release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          ref: v${{ inputs.version }}
-      - uses: actions/setup-node@v4
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
-          cache: npm
+          package-manager-cache: false
+      - name: Validate release version
+        id: version
+        env:
+          RAW_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          node - <<'NODE'
+          const fs = require('node:fs');
+
+          const raw = process.env.RAW_VERSION.trim();
+          if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(raw)) {
+            throw new Error(`Invalid semantic version: ${raw}`);
+          }
+          const packageVersion = JSON.parse(fs.readFileSync('package.json', 'utf8')).version;
+          if (raw !== packageVersion) {
+            throw new Error(`Release version ${raw} does not match package.json ${packageVersion}`);
+          }
+          fs.appendFileSync(process.env.GITHUB_OUTPUT, `tag=v${raw}\n`);
+          NODE
+      - name: Select normal release source or existing tag
+        env:
+          RESUME_PUBLISH: ${{ inputs.resume_publish }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [[ "$RESUME_PUBLISH" == "true" ]]; then
+            git rev-parse "${TAG}^{commit}" >/dev/null
+            git checkout --detach "$TAG"
+          else
+            if [[ "$GITHUB_REF_TYPE" != "branch" || "$GITHUB_REF_NAME" != "main" ]]; then
+              echo "Normal releases must run from main" >&2
+              exit 1
+            fi
+            if git rev-parse "${TAG}^{commit}" >/dev/null 2>&1; then
+              echo "Tag ${TAG} already exists; use resume_publish to retry publication" >&2
+              exit 1
+            fi
+          fi
       - run: npm ci
       - run: npm run check
       - run: npm run check:generated
       - run: npm test
       - run: npm pack --dry-run
-      - name: Verify tag and package version
+      - name: Commit and push normal release tag
+        if: ${{ !inputs.resume_publish }}
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ inputs.version }}
         run: |
-          test "$(git describe --exact-match --tags)" = "v${{ inputs.version }}"
-          test "$(node -p \"require('./package.json').version\")" = "${{ inputs.version }}"
-      - run: npm publish --provenance --access public
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "MemAura TypeScript SDK $VERSION"
+          git push origin "refs/tags/$TAG"
+
+  publish:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    environment:
+      name: npm
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare-release.outputs.tag }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - run: npm ci
+      - run: npm run check
+      - run: npm run check:generated
+      - run: npm test
+      - run: npm pack --dry-run
+      - name: Publish verified package to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          package_name="$(node -p "require('./package.json').name")"
+          version="$(node -p "require('./package.json').version")"
+          if npm view "${package_name}@${version}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "${package_name}@${version} is already published."
+          else
+            npm publish --provenance --access public
+          fi
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "GitHub Release $TAG already exists."
+            exit 0
+          fi
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+            --title "MemAura TypeScript SDK ${TAG#v}" --generate-notes
