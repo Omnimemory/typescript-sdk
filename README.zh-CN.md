@@ -70,10 +70,104 @@ const result = await memory.retrieve({ query: '我偏好什么时候进行产品
 for (const card of result.cards) console.log(card.content);
 ```
 
+### 构造函数与输入类型
+
+```ts
+type MemoryV4Options = {
+  apiKey: string; endpoint?: string; deviceNo?: string; timeoutMs?: number;
+};
+
+type V4Turn = {
+  content: string;
+  role?: 'user' | 'assistant' | 'system';
+  turnId?: string;
+  timestamp?: string;
+  senderName?: string;
+  referList?: string[];
+};
+
+declare const options: MemoryV4Options;
+const memory = new MemoryV4(options);
+```
+
+`endpoint` 默认为 `https://api.omnimemory.cn/api/v3`；`deviceNo` 提供默认
+`X-Device-No` 请求头；单次请求的 `timeoutMs` 默认为 `30_000`。
+
+### `memory.ingest(input): Promise<V4Job>`
+
+调用 `POST /memory/ingest_4`。`input.turns` 必填。可选字段为 `language`
+（`auto`、`zh` 或 `en`）、`timezone`、`deviceNo`、`waitFor`（`staged` 或
+`searchable`）以及范围为 `(0, 300]` 的 `waitTimeoutSeconds`。
+
+### `memory.retrieve(input): Promise<V4RetrievalResult>`
+
+调用 `POST /memory/retrieval_4`。
+
+| 输入字段 | 类型/默认值 | 说明 |
+| --- | --- | --- |
+| `query` | 必填 `string` | 非空检索问题。 |
+| `topK` | `number` | 1–100 的整数。 |
+| `vectorWeight` | `number = 0.8` | 0–1 的向量/文本融合权重。 |
+| `tagKeys` | `string[] = []` | 硬标签过滤。 |
+| `role` | `string` | Card 角色过滤。 |
+| `scopeType` | `account`、`api_key` 或 `device` | 记忆作用域。 |
+| `startTime`, `endTime` | `string` | 显式时间范围。 |
+| `entityId` | `string` | 实体过滤。 |
+| `entityMatchMode` | `primary`、`involved` 或 `source` | 实体匹配方式。 |
+| `participantRoles` | `string[]` | 参与角色过滤。 |
+| `deviceNo` | `string` | 单次操作设备号覆盖。 |
+| `includeQueryAnalysis` | `boolean = false` | 返回查询分析。 |
+| `includeDetails` | `boolean = false` | 在 `details` 中保留完整响应。 |
+
+返回 `{ cards, queryAnalysis?, details? }`。每张 Card 包含 `cardId`、`role`、
+`content` 和 `episodes`；每个 Episode 包含 `episodeId` 与 `summary`。
+
+### V4 任务
+
+- `memory.jobs.get(jobId): Promise<V4Job>` 查询 `GET /memory/ingest_4/jobs/{jobId}`。
+- `memory.getJob(jobId, timeoutMs?)` 是对应的直接调用形式。
+- `memory.jobs.wait(jobId, { timeoutMs?, intervalMs?, signal? })` 默认总超时五分钟、每秒轮询一次。
+
+`V4Job` 包含 `jobId`、可选 `status`、可选 `waitTimedOut` 和可选的
+`{ code?, message? }` 错误。等待状态为 `queued`、`staged`、`processing`、
+`buffered`、`indexing`；终态为 `succeeded`、`failed`。`V4JobOperations`
+也会导出供类型标注或高级组合使用，但客户端已通过 `memory.jobs` 提供配置好的实例。
+
+公开导出的 V4 类型包括 `MemoryV4Options`、`V4Turn`、`V4IngestInput`、
+`V4Job`、`V4Episode`、`V4Card`、`V4RetrievalInput`、`V4RetrievalResult`
+和 `V4WaitOptions`。
+
 V4 写入不会自动重试。本地等待超时不会取消后台任务，请继续查询同一个 `jobId`。检索支持
 `topK`、向量/文本融合权重、硬标签、角色和作用域、显式时间范围，以及实体和参与角色过滤。
 
-## 旧版 V2 检索
+## 旧版 V2 API
+
+### 构造函数与写入
+
+```ts
+type MemoryOptions = {
+  apiKey: string; endpoint?: string; deviceNo?: string; timeoutMs?: number;
+};
+type AddInput = {
+  turns: Array<{
+    content: string; role?: MemoryRole; turnId?: string; timestamp?: string;
+    senderName?: string; referList?: string[];
+  }>;
+  sessionId?: string; groupId?: string; groupName?: string;
+  commitId?: string; deviceNo?: string;
+};
+
+declare const options: MemoryOptions;
+declare const input: AddInput;
+const memory = new Memory(options);
+const job = await memory.add(input);
+```
+
+V2 端点默认为 `https://api.omnimemory.cn/api/v2`，单次请求超时默认
+`30_000`ms。`add()` 返回 `{ jobId, sessionId?, status, statusUrl }`。写入为异步
+操作且不会自动重试；调用方需要安全重试时应传入稳定的 `commitId`。
+
+### 检索
 
 `search()` 保持既有检索链路；新集成在有稳定设备号时，推荐使用 `searchHybrid()`。
 
@@ -93,6 +187,11 @@ const hybrid = await memory.searchHybrid({
 
 两个检索方法都会按相关性顺序返回 `evidenceDetails`。下游构造上下文时应使用这些证据，而不要依赖上游记忆引擎的原始响应。
 
+两者共用 `{ query, limit?, groupId?, deviceNo? }` 输入；传入 `limit` 时必须为
+正整数。返回结构均为 `{ strategy, query, evidence, evidenceDetails,
+requestedGroupId? }`。每条 evidence detail 包含 `eventId`、`text`，以及可选的
+`source`、`role`、`senderName`、`atomicFacts`、`groupId` 和 `timestamp`。
+
 ## 写入任务
 
 ```ts
@@ -104,7 +203,14 @@ const terminal = await memory.jobs.wait(job.jobId, {
 });
 ```
 
+`jobs.get(jobId, { deviceNo? })` 返回 `{ jobId?, sessionId?, status? }`；
+`jobs.wait` 还接受 `deviceNo` 和用于取消等待的 `signal`。
+
 `jobs.wait()` 只轮询任务状态，不会重新提交 ingest。它会在 `succeeded`、`accumulated` 等成功终态以及失败终态停止，请检查 `status` 区分结果。它的超时覆盖完整等待过程，包括正在执行的状态请求；如果已拿到状态，`MemAuraTimeoutError` 会携带 `lastJob`。
+
+公开导出的 V2 类型包括 `MemoryOptions`、`MemoryRole`、`MemoryTurn`、
+`AddInput`、`AddResult`、`SearchInput`、`EvidenceDetail`、`SearchResult`、
+`JobLookupOptions`、`WaitForJobOptions` 和 `JobStatus`。
 
 ## 错误处理
 
@@ -129,6 +235,9 @@ try {
 ```
 
 公开错误层级包括 `MemAuraError`、`MemAuraValidationError`、`MemAuraNetworkError`、`MemAuraTimeoutError` 和 `MemAuraApiError`。
+
+`MemAuraTimeoutError.lastJob` 在可用时保存最后一次任务状态；
+`MemAuraApiError` 提供 `status`、`code`、`error` 和 `details`。
 
 ## 能力边界
 
