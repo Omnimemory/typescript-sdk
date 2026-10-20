@@ -74,7 +74,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run check:generated
-      - run: npm test
+      - run: npm run test:coverage
       - run: npm pack --dry-run
       - name: Commit and push normal release tag
         if: ${{ !inputs.resume_publish }}
@@ -108,7 +108,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run check:generated
-      - run: npm test
+      - run: npm run test:coverage
       - run: npm pack --dry-run
       - name: Publish verified package to npm
         env:

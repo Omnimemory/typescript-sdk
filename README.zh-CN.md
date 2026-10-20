@@ -254,6 +254,10 @@ try {
 
 支持 Node.js 18、20、22、24 和 26。CI 会在每个支持的大版本上执行类型检查、生成契约检查、HTTP 行为测试、ESM/CJS 导出测试和包内容冒烟测试。
 
+CI 还要求全部手写运行时模块（`errors.ts`、`jobs.ts`、`memory.ts` 和
+`v4.ts`）的语句、分支、函数与行覆盖率均为 100%。生成的 OpenAPI 代码和仅负责
+导出的 `index.ts` barrel 明确不计入该口径。本地可运行 `npm run test:coverage` 执行同一门禁。
+
 ## 许可证
 
 [MIT](LICENSE)

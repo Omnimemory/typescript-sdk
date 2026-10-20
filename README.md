@@ -260,6 +260,11 @@ It does not provide account, billing, login, or admin APIs. It neither accepts n
 
 The SDK supports Node.js 18, 20, 22, 24, and 26. CI runs type checks, generated-contract checks, HTTP behavior tests, ESM/CJS export tests, and package smoke checks on each supported major version.
 
+CI also requires 100% statement, branch, function, and line coverage for every
+hand-written runtime module (`errors.ts`, `jobs.ts`, `memory.ts`, and `v4.ts`).
+Generated OpenAPI code and the export-only `index.ts` barrel are explicitly
+outside this coverage metric. Run the same gate locally with `npm run test:coverage`.
+
 ## License
 
 [MIT](LICENSE)

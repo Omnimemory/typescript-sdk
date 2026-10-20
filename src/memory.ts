@@ -221,6 +221,7 @@ export class Memory {
         throw new MemAuraTimeoutError(`Request timed out after ${timeoutMs}ms`, { cause: error });
       }
       throw new MemAuraNetworkError('Unable to reach MemAura Router', { cause: error });
+    /* c8 ignore next -- V8 reports a synthetic source-map branch on `finally`; the body runs on every tested exit. */
     } finally {
       clearTimeout(timer);
     }

@@ -27,6 +27,7 @@
     "build:coverage": "tsup --sourcemap",
     "check": "tsc --noEmit",
     "test": "npm run build && node --test test/*.test.mjs",
+    "test:coverage": "npm run build:coverage && c8 --reporter=json --exclude-after-remap=false node --test test/*.test.mjs && node scripts/check-coverage.mjs",
     "test:v4:coverage": "npm run build:coverage && c8 --reporter=json --exclude-after-remap=false node --test test/v4.test.mjs && node scripts/check-v4-coverage.mjs",
     "sync:openapi": "node scripts/create-openapi-snapshot.mjs",
     "generate": "openapi-ts",
