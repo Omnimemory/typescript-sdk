@@ -7,7 +7,7 @@ test('package and release workflow publish the scoped package publicly with prov
   const workflow = await readFile('.github/workflows/release.yml', 'utf8');
 
   assert.equal(packageJson.name, '@memaura/sdk');
-  assert.equal(packageJson.version, '0.0.1');
+  assert.equal(packageJson.version, '0.1.0');
   assert.equal(packageJson.publishConfig?.access, 'public');
   assert.match(workflow, /resume_publish/);
   assert.match(workflow, /contents:\s*write/);

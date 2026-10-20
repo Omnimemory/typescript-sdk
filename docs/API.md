@@ -1,6 +1,39 @@
 # API Reference
 
-## `new Memory(options)`
+## V4 API
+
+### `new MemoryV4(options)`
+
+```ts
+new MemoryV4({
+  apiKey: string;
+  endpoint?: string;
+  deviceNo?: string;
+  timeoutMs?: number;
+});
+```
+
+`apiKey` is required. `endpoint` defaults to `https://api.omnimemory.cn/api/v3`; `deviceNo` supplies the default `X-Device-No` header, and `timeoutMs` defaults to `30_000` per request.
+
+### `memory.ingest(input)`
+
+Submits `turns` to `/memory/ingest_4`. Optional controls include `language` (`auto`, `zh`, or `en`), `timezone`, `deviceNo`, `waitFor` (`staged` or `searchable`), and `waitTimeoutSeconds` (maximum 300). It returns `{ jobId, status?, waitTimedOut?, error? }`.
+
+V4 ingestion is sent exactly once. The SDK never retries a write automatically; after an ambiguous timeout or network failure, use the retained job ID or an application-level idempotency strategy instead of blindly resubmitting.
+
+### `memory.retrieve(input)`
+
+Posts to `/memory/retrieval_4` and returns normalized `cards`, with compact `episodes` on each card. The input supports `query`, `topK`, `vectorWeight`, `tagKeys`, `role`, `scopeType`, `startTime`, `endTime`, `entityId`, `entityMatchMode`, `participantRoles`, `deviceNo`, `includeQueryAnalysis`, and `includeDetails`.
+
+`scopeType` accepts `account`, `api_key`, or `device`; `entityMatchMode` accepts `primary`, `involved`, or `source`. When requested, `queryAnalysis` and the raw response `details` are included in the result.
+
+### `memory.jobs.get(jobId)` and `memory.jobs.wait(jobId, options?)`
+
+V4 jobs are read from `/memory/ingest_4/jobs/{jobId}`. `wait` polls the same job until `succeeded` or `failed`; pending states are `queued`, `staged`, `processing`, `buffered`, and `indexing`. Its defaults are a five-minute total timeout and one-second polling interval. A timeout throws `MemAuraTimeoutError` with the last observed job when available.
+
+## Legacy V2 API
+
+### `new Memory(options)`
 
 ```ts
 new Memory({
@@ -13,7 +46,7 @@ new Memory({
 
 `apiKey` is required. `endpoint` defaults to `https://api.omnimemory.cn/api/v2`; it must be an absolute URL. `deviceNo` is sent as `X-Device-No` by default and can be overridden per operation. `timeoutMs` is the per-request timeout and defaults to `30_000`.
 
-## `memory.add(input)`
+### `memory.add(input)`
 
 ```ts
 await memory.add({
@@ -35,7 +68,7 @@ await memory.add({
 
 Returns `{ jobId, sessionId?, status, statusUrl }`. A non-empty `turns` array is required. The method posts `/memory/ingest` and returns when Router accepts the job.
 
-## `memory.search(input)` and `memory.searchHybrid(input)`
+### `memory.search(input)` and `memory.searchHybrid(input)`
 
 ```ts
 await memory.search({
@@ -69,11 +102,11 @@ Both methods return:
 
 `search()` calls `/memory/retrieval`; `searchHybrid()` calls `/memory/retrieval/hybrid`. `query` must be non-empty and `limit`, when set, must be a positive integer.
 
-## `memory.jobs.get(jobId, options?)`
+### `memory.jobs.get(jobId, options?)`
 
 Reads one ingest job from `/memory/ingest/jobs/{jobId}`. It returns `{ jobId?, sessionId?, status? }`.
 
-## `memory.jobs.wait(jobId, options?)`
+### `memory.jobs.wait(jobId, options?)`
 
 ```ts
 await memory.jobs.wait(jobId, {

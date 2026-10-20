@@ -50,7 +50,32 @@ for (const evidence of result.evidenceDetails) {
 
 `add()` accepts the job asynchronously. Pass a stable `commitId` whenever your application may retry a write: Router deduplicates repeated submissions with the same key in the same device or session scope. The SDK deliberately never retries writes implicitly.
 
-## Retrieval
+## V4 Card/Episode API
+
+`MemoryV4` is the additive client for the current `/api/v3` data plane. The
+legacy `Memory` class remains available for existing `/api/v2` integrations.
+
+```ts
+import { MemoryV4 } from '@memaura/sdk';
+
+const memory = new MemoryV4({ apiKey: process.env.MEMAURA_API_KEY!, deviceNo: 'DEVICE-001' });
+const ack = await memory.ingest({ turns: [
+  { role: 'user', content: 'I prefer product reviews on Wednesday afternoons.' },
+  { role: 'assistant', content: 'Noted.' },
+] });
+const job = await memory.jobs.wait(ack.jobId, { timeoutMs: 300_000 });
+if (job.status === 'failed') throw new Error(JSON.stringify(job.error));
+
+const result = await memory.retrieve({ query: 'When do I prefer product reviews?', topK: 5 });
+for (const card of result.cards) console.log(card.content);
+```
+
+V4 writes are never retried automatically. A local wait timeout does not
+cancel the job; continue polling the same `jobId`. Retrieval supports `topK`,
+weighted vector/text fusion, hard tags, role and scope selection, explicit time
+ranges, and entity/participant filters.
+
+## Legacy V2 Retrieval
 
 Use `search()` to preserve the established retrieval path. Use `searchHybrid()` for new integrations that supply a stable device identifier.
 

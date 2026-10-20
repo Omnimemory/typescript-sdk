@@ -50,7 +50,30 @@ for (const evidence of result.evidenceDetails) {
 
 `add()` 只负责异步提交任务。应用可能重试写入时，请传稳定的 `commitId`：Router 会在同一设备或会话范围内对同一个键去重。SDK 不会隐式重试写入，避免产生重复记忆。
 
-## 检索
+## V4 Card/Episode API
+
+`MemoryV4` 是面向当前 `/api/v3` 数据面的新增客户端；原有 `Memory` 类继续服务已有的
+`/api/v2` 接入，行为不变。
+
+```ts
+import { MemoryV4 } from '@memaura/sdk';
+
+const memory = new MemoryV4({ apiKey: process.env.MEMAURA_API_KEY!, deviceNo: 'DEVICE-001' });
+const ack = await memory.ingest({ turns: [
+  { role: 'user', content: '我偏好周三下午进行产品评审。' },
+  { role: 'assistant', content: '好的，已记下。' },
+] });
+const job = await memory.jobs.wait(ack.jobId, { timeoutMs: 300_000 });
+if (job.status === 'failed') throw new Error(JSON.stringify(job.error));
+
+const result = await memory.retrieve({ query: '我偏好什么时候进行产品评审？', topK: 5 });
+for (const card of result.cards) console.log(card.content);
+```
+
+V4 写入不会自动重试。本地等待超时不会取消后台任务，请继续查询同一个 `jobId`。检索支持
+`topK`、向量/文本融合权重、硬标签、角色和作用域、显式时间范围，以及实体和参与角色过滤。
+
+## 旧版 V2 检索
 
 `search()` 保持既有检索链路；新集成在有稳定设备号时，推荐使用 `searchHybrid()`。
 
