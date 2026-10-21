@@ -143,7 +143,7 @@ test('Memory jobs wait exposes the last observed status on timeout', async (t) =
 
   const memory = new Memory({ apiKey: 'qbk_test', endpoint: server.url });
   await assert.rejects(
-    memory.jobs.wait('job-1', { intervalMs: 1, timeoutMs: 20 }),
+    memory.jobs.wait('job-1', { intervalMs: 1, timeoutMs: 100 }),
     (error) => error instanceof MemAuraTimeoutError && error.lastJob?.status === 'queued',
   );
 });

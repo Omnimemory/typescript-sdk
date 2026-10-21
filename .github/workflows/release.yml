@@ -111,8 +111,6 @@ jobs:
       - run: npm run test:coverage
       - run: npm pack --dry-run
       - name: Publish verified package to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           set -euo pipefail
           package_name="$(node -p "require('./package.json').name")"

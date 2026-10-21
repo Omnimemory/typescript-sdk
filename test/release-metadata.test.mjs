@@ -13,7 +13,7 @@ test('package and release workflow publish the scoped package publicly with prov
   assert.match(workflow, /contents:\s*write/);
   assert.match(workflow, /id-token:\s*write/);
   assert.match(workflow, /environment:\s*\n\s*name:\s*npm/);
-  assert.match(workflow, /NODE_AUTH_TOKEN:\s*\$\{\{ secrets\.NPM_TOKEN \}\}/);
+  assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN|NPM_TOKEN/);
   assert.match(workflow, /npm publish --provenance --access public/);
   assert.match(workflow, /gh release create/);
   assert.match(workflow, /--verify-tag/);
