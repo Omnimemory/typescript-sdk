@@ -105,6 +105,7 @@ jobs:
           node-version: 24
           registry-url: https://registry.npmjs.org
           package-manager-cache: false
+      - run: npm install --global npm@12.2.0
       - run: npm ci
       - run: npm run check
       - run: npm run check:generated

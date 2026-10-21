@@ -14,6 +14,7 @@ test('package and release workflow publish the scoped package publicly with prov
   assert.match(workflow, /id-token:\s*write/);
   assert.match(workflow, /environment:\s*\n\s*name:\s*npm/);
   assert.match(workflow, /actions\/setup-node@v7/);
+  assert.match(workflow, /npm install --global npm@12\.2\.0/);
   assert.doesNotMatch(workflow, /NODE_AUTH_TOKEN|NPM_TOKEN/);
   assert.match(workflow, /npm publish --provenance --access public/);
   assert.match(workflow, /gh release create/);
