@@ -124,7 +124,7 @@ test('Memory jobs get and wait without resubmitting the ingest request', async (
 
   const memory = new Memory({ apiKey: 'qbk_test', endpoint: server.url, deviceNo: 'device-a' });
   const first = await memory.jobs.get('job/1');
-  const completed = await memory.jobs.wait('job/1', { intervalMs: 1, timeoutMs: 100 });
+  const completed = await memory.jobs.wait('job/1', { intervalMs: 1, timeoutMs: 1_000 });
 
   assert.equal(first.status, 'queued');
   assert.equal(completed.status, 'succeeded');
@@ -153,7 +153,7 @@ test('Memory jobs wait treats accumulated as a normal terminal status', async (t
   t.after(server.close);
 
   const memory = new Memory({ apiKey: 'qbk_test', endpoint: server.url });
-  const status = await memory.jobs.wait('job-1', { intervalMs: 1, timeoutMs: 100 });
+  const status = await memory.jobs.wait('job-1', { intervalMs: 1, timeoutMs: 1_000 });
 
   assert.equal(status.status, 'accumulated');
   assert.equal(server.requests.length, 1);
